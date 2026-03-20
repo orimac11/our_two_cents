@@ -115,15 +115,48 @@ def telegram_input():
     Catches everything typed in the bot's chat.
     """
     data = request.json
-
-    # For right now, we just want to see what Telegram sends us
-    print("📥 Raw Data from Telegram:", data)
-
     # CRITICAL: We must reply with a 200 OK immediately.
     # If we don't, Telegram assumes the server is dead and will retry sending the message 50 times.
     return jsonify({"status": "ok"}), 200
 
 
+@bot.message_handler(commands=['add'])
+def handle_manual_add(message):
+    """
+    Fires when you type: /add 50 Aroma
+    """
+    # 1. Extract the text after the command
+    content = message.text.replace('/add', '').strip()
+
+    if not content:
+        bot.reply_to(message,
+                     "❌ Please provide details. Example: /add 50 Aroma")
+        return
+
+    # 2. Create buttons using the EXACT SAME 'Pipe' format: action|merchant|amount
+    # We put 'Manual' in the amount slot so the handler knows how to display it.
+    markup = types.InlineKeyboardMarkup(row_width=2)
+
+    cb_shared = f"btn_shrd|{content[:20]}|Manual"
+    cb_personal = f"btn_priv|{content[:20]}|Manual"
+
+    # Note: Changed 'callback_id' to 'callback_data'
+    btn_shared = types.InlineKeyboardButton("Shared 🏠", callback_data=cb_shared)
+    btn_personal = types.InlineKeyboardButton("Personal 👤",
+                                              callback_data=cb_personal)
+
+    markup.add(btn_shared, btn_personal)
+
+    # 3. Send the message
+    message_text = (
+        f"📝 *Manual Entry Received*\n\n"
+        f"👤 *Payer:* {message.from_user.first_name}\n"
+        f"📖 *Details:* {content}\n\n"
+        f"How should we log this?"
+    )
+
+    bot.send_message(message.chat.id, message_text, reply_markup=markup,
+                     parse_mode="Markdown")
 # --- 4. EXECUTION ---
 if __name__ == '__main__':
     # Local development server (port 8000)
