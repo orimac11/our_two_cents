@@ -1,69 +1,83 @@
-from flask import Flask, request, jsonify
-import requests
 import os
+import telebot
+from flask import Flask, request, jsonify
+from telebot import types
 from dotenv import load_dotenv
 
-# 1. Load Environment Variables
+# Note: We are NOT importing database.py or ai_parser.py yet for this test
 load_dotenv()
 
+# Configuration
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+MY_CHAT_ID = os.getenv('MY_CHAT_ID')
+
+bot = telebot.TeleBot(TELEGRAM_TOKEN)
 app = Flask(__name__)
 
-# --- Configuration ---
-# These should be set in your .env file on PythonAnywhere
-TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_TOKEN')
-TELEGRAM_GROUP_CHAT_ID = os.getenv('MY_CHAT_ID')
 
-def send_to_telegram(payer, content):
-    """Sends a formatted debug message to verify the 'Plumbing'."""
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-
-    message_text = (
-        f"🔗 <b>Webhook Triggered!</b>\n\n"
-        f"👤 <b>Payer:</b> {payer}\n"
-        f"📝 <b>Input:</b> {content}\n\n"
-        f"<i>Status: Server is listening on /webhook</i>"
-    )
-
-    payload = {
-        "chat_id": TELEGRAM_GROUP_CHAT_ID,
-        "text": message_text,
-        "parse_mode": "HTML"
-    }
-
-    try:
-        response = requests.post(url, json=payload)
-        response.raise_for_status()
-    except Exception as e:
-        print(f"Telegram API Error: {e}")
-
-# 2. The Synchronized Route
 @app.route('/webhook', methods=['POST'])
 def handle_webhook():
     """
-    Matches your iOS Shortcut URL ending in /webhook.
-    Expects: {"text": "...", "payer": "..."}
+    Receives the 'tap' from your iPhone.
+    Expected JSON: {"text": "...", "payer": "..."}
     """
     data = request.json
-
     if not data:
-        print("Error: Received request with no JSON body")
-        return jsonify({"error": "No JSON received"}), 400
+        return jsonify({"status": "error", "message": "No JSON"}), 400
 
-    # Extracting the new fields
-    content = data.get('text', 'No text provided')
-    payer = data.get('payer', 'Unknown')
+    content = data.get('text', 'Test Transaction')
+    payer = data.get('payer', 'Mike')
 
-    print(f"Success: Received data from {payer}")
+    # 1. Create the Inline Keyboard (The Buttons)
+    markup = types.InlineKeyboardMarkup(row_width=2)
 
-    # Send the verification message
-    send_to_telegram(payer, content)
+    # callback_data is the hidden string sent back to the server when clicked
+    btn_shared = types.InlineKeyboardButton("Shared 🏠",
+                                            callback_data="choice_shared")
+    btn_personal = types.InlineKeyboardButton("Personal 👤",
+                                              callback_data="choice_personal")
 
-    return jsonify({"status": "connected", "received": content}), 200
+    markup.add(btn_shared, btn_personal)
 
-# 3. Health Check for Browser Testing
-@app.route('/')
-def index():
-    return "🚀 Server is live and listening on /webhook"
+    # 2. Send the message with buttons
+    message_text = (
+        f"💳 *Transaction Received*\n\n"
+        f"👤 *Payer:* {payer}\n"
+        f"📝 *Details:* {content}\n\n"
+        f"How should we log this?"
+    )
+
+    bot.send_message(MY_CHAT_ID, message_text, reply_markup=markup,
+                     parse_mode="Markdown")
+
+    return jsonify({"status": "ui_triggered"}), 200
+
+
+@bot.callback_query_handler(func=lambda call: True)
+def handle_button_click(call):
+    """
+    This function runs when you tap 'Shared' or 'Personal' in Telegram.
+    """
+    # Identify which button was pressed
+    if call.data == "choice_shared":
+        result_label = "Shared ✅"
+    else:
+        result_label = "Personal 👤"
+
+    # 3. Update the existing message to show the choice (UX improvement)
+    # This replaces the buttons with a confirmation text
+    final_text = f"{call.message.text}\n\n📍 *Decision:* {result_label}\n(Not saved to DB yet)"
+
+    bot.edit_message_text(
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        text=final_text,
+        parse_mode="Markdown"
+    )
+
+    # 4. Show a small "Toast" notification at the top of Telegram
+    bot.answer_callback_query(call.id, f"Selection: {result_label}")
+
 
 if __name__ == '__main__':
     app.run(port=8000, debug=True)
