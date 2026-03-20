@@ -79,5 +79,22 @@ def handle_button_click(call):
     bot.answer_callback_query(call.id, f"Selection: {result_label}")
 
 
+# 3. The Telegram Route (The Listening Ear)
+@app.route('/telegram', methods=['POST'])
+def telegram_input():
+    """
+    Matches the webhook URL we will give to Telegram.
+    Catches everything typed in the bot's chat.
+    """
+    data = request.json
+
+    # For right now, we just want to see what Telegram sends us
+    print("📥 Raw Data from Telegram:", data)
+
+    # CRITICAL: We must reply with a 200 OK immediately.
+    # If we don't, Telegram assumes the server is dead and will retry sending the message 50 times.
+    return jsonify({"status": "ok"}), 200
+
+
 if __name__ == '__main__':
     app.run(port=8000, debug=True)
