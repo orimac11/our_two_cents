@@ -78,6 +78,18 @@ def handle_button_click(call):
     # 4. Show a small "Toast" notification at the top of Telegram
     bot.answer_callback_query(call.id, f"Selection: {result_label}")
 
+@app.route('/telegram', methods=['POST'])
+def telegram_input():
+    # 1. Grab the raw data
+    json_string = request.get_data().decode('utf-8')
+
+    # 2. THE TRIPWIRE: Force the raw payload into the PythonAnywhere error log
+    app.logger.error(f"RAW TELEGRAM DATA: {json_string}")
+
+    # 3. Process the update
+    update = telebot.types.Update.de_json(json_string)
+    bot.process_new_updates([update])
+    return jsonify({"status": "ok"}), 200
 
 # 3. The Telegram Route
 @bot.message_handler(commands=['add'])
