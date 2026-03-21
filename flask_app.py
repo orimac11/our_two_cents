@@ -79,47 +79,65 @@ def handle_button_click(call):
     bot.answer_callback_query(call.id, f"Selection: {result_label}")
 
 
-# 3. The Telegram Route (The Listening Ear)
-@app.route('/telegram', methods=['POST'])
-def telegram_input():
-    """
-    Matches the webhook URL we will give to Telegram.
-    Catches everything typed in the bot's chat.
-    """
-    data = request.json
-    # CRITICAL: We must reply with a 200 OK immediately.
-    # If we don't, Telegram assumes the server is dead and will retry sending the message 50 times.
-    return jsonify({"status": "ok"}), 200
-
-
+# 3. The Telegram Route
 @bot.message_handler(commands=['add'])
 def handle_manual_add(message):
     """
     Fires when you type: /add 50 Aroma
     """
-    # 1. Extract the text after the word '/add'
-    # Example: '/add 50 Aroma' -> '50 Aroma'
-    content = message.text.replace('/add', '').strip()
+    # 1. Strip out the command itself
+    raw_text = message.text.replace('/add', '').strip()
 
-    if not content:
+    # 2. Check if they typed anything at all
+    if not raw_text:
         bot.reply_to(message, "❌ Please provide details. Example: /add 50 Aroma")
         return
 
-    # 2. Reuse your EXACT same button UI logic
+    # 3. Take it apart: Split the text into exactly two pieces (Amount and Merchant)
+    # maxsplit=1 ensures that "50 Aroma Tel Aviv" splits into "50" and "Aroma Tel Aviv"
+    parts = raw_text.split(maxsplit=1)
+
+    if len(parts) < 2:
+        bot.reply_to(message, "❌ Please include both an amount and a merchant. Example: /add 50 Aroma")
+        return
+
+    amount = parts[0]
+    merchant = parts[1]
+
+    # Optional but highly recommended: Verify the amount is actually a number
+    try:
+        float(amount)
+    except ValueError:
+        bot.reply_to(message, "❌ The amount must be a number. Example: /add 50 Aroma")
+        return
+
+    # 4. Create the buttons using your pipe format: action|merchant|amount
     markup = types.InlineKeyboardMarkup(row_width=2)
-    btn_shared = types.InlineKeyboardButton("Shared 🏠", callback_id="choice_shared")
-    btn_personal = types.InlineKeyboardButton("Personal 👤", callback_id="choice_personal")
+
+    # Slice merchant to 20 chars to guarantee we stay under Telegram's 64-byte limit
+    safe_merchant = merchant[:20]
+
+    cb_shared = f"btn_shrd|{safe_merchant}|{amount}"
+    cb_personal = f"btn_priv|{safe_merchant}|{amount}"
+
+    btn_shared = types.InlineKeyboardButton("Shared 🏠", callback_data=cb_shared)
+    btn_personal = types.InlineKeyboardButton("Personal 👤", callback_data=cb_personal)
     markup.add(btn_shared, btn_personal)
 
-    # 3. Send the message with the exact same look as your Apple Pay webhook
+    # 5. Build and send the response
     message_text = (
-        f"💳 *Manual Entry Received*\n\n"
+        f"📝 *Manual Entry Received*\n\n"
         f"👤 *Payer:* {message.from_user.first_name}\n"
-        f"📝 *Details:* {content}\n\n"
+        f"💰 *Amount:* ₪{amount}\n"
+        f"🏪 *Merchant:* {merchant}\n\n"
         f"How should we log this?"
     )
 
-    bot.send_message(message.chat.id, message_text, reply_markup=markup, parse_mode="Markdown")
-
+    bot.send_message(
+        message.chat.id,
+        message_text,
+        reply_markup=markup,
+        parse_mode="Markdown"
+    )
 if __name__ == '__main__':
     app.run(port=8000, debug=True)
