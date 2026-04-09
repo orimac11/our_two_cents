@@ -10,6 +10,7 @@ the confirmed expense to the database.
 """
 
 import os
+import re
 from telebot import types
 from ai_parser import parser_service
 from database_manager import add_expense
@@ -80,6 +81,15 @@ def register_handlers(bot) -> None:
             return
 
         enriched = parser_service.parse(raw_text)
+        print(f"[DEBUG] Parser result for '{raw_text}': {enriched}")
+
+        # Fallback: if AI missed the amount, try extracting the first number from raw text
+        if enriched['amount'] <= 0:
+            match = re.search(r'\d+(?:[.,]\d+)?', raw_text)
+            if match:
+                fallback_amount = float(match.group().replace(',', '.'))
+                print(f"[DEBUG] AI returned 0, using regex fallback amount: {fallback_amount}")
+                enriched['amount'] = fallback_amount
 
         if enriched['amount'] <= 0:
             bot.reply_to(
