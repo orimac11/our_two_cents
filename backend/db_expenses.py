@@ -11,6 +11,42 @@ per-person breakdowns, monthly settlement calculations, and yearly summaries.
 import sqlite3
 
 
+def add_pending_expense(merchant: str, amount: float, payer: str, category: str) -> int | None:
+    """Insert a new expense with split='pending' and return its row ID.
+
+    :returns: The new row's integer ID, or ``None`` on error.
+    """
+    try:
+        with sqlite3.connect('finance_bot.db') as conn:
+            cursor = conn.cursor()
+            sql = '''INSERT INTO expenses (merchant, amount, payer, split, category)
+                     VALUES (?, ?, ?, 'pending', ?)'''
+            cursor.execute(sql, (merchant, amount, payer, category))
+            conn.commit()
+            return cursor.lastrowid
+    except sqlite3.Error as e:
+        print(f"❌ Database Error: {e}")
+    return None
+
+
+def confirm_expense_split(expense_id: int, split: str) -> bool:
+    """Update the split type for a pending expense.
+
+    :param expense_id: The row ID returned by ``add_pending_expense``.
+    :param split: ``'shared'`` or ``'personal'``.
+    :returns: ``True`` on success, ``False`` on error.
+    """
+    try:
+        with sqlite3.connect('finance_bot.db') as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE expenses SET split = ? WHERE id = ?", (split, expense_id))
+            conn.commit()
+            return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"❌ Database Error: {e}")
+    return False
+
+
 def add_expense(merchant: str, amount: float, payer: str, split: str, category: str) -> bool:
     """Insert a new expense record into the database.
 

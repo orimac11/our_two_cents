@@ -18,6 +18,8 @@ Tables managed:
 import sqlite3
 
 from db_expenses import (
+    add_pending_expense,
+    confirm_expense_split,
     add_expense,
     get_total_monthly_expenses,
     get_average_total_monthly_expenses,
@@ -63,7 +65,7 @@ def setup_database() -> bool:
                     merchant TEXT,
                     amount REAL,
                     payer TEXT,
-                    split TEXT CHECK(split IN('shared', 'personal')),
+                    split TEXT CHECK(split IN('shared', 'personal', 'pending')),
                     category TEXT CHECK(category IN ('Rent', 'Utilities', 'Groceries', 'Eating Out', 'Transport','Maintenance', 'Shopping', 'Health', 'Leisure', 'Other')),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
@@ -109,6 +111,26 @@ def setup_database() -> bool:
             cursor.execute(f"ALTER TABLE {table} ADD COLUMN payer TEXT")
         except sqlite3.OperationalError:
             pass  # Column already exists
+
+    # Migration: expand expenses.split CHECK constraint to include 'pending'.
+    # SQLite doesn't support ALTER TABLE ... MODIFY CONSTRAINT, so we recreate the table.
+    cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='expenses'")
+    row = cursor.fetchone()
+    if row and "'pending'" not in row[0]:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS expenses_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                merchant TEXT,
+                amount REAL,
+                payer TEXT,
+                split TEXT CHECK(split IN('shared', 'personal', 'pending')),
+                category TEXT CHECK(category IN ('Rent', 'Utilities', 'Groceries', 'Eating Out', 'Transport','Maintenance', 'Shopping', 'Health', 'Leisure', 'Other')),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute("INSERT INTO expenses_new SELECT * FROM expenses")
+        cursor.execute("DROP TABLE expenses")
+        cursor.execute("ALTER TABLE expenses_new RENAME TO expenses")
 
     connection.commit()
     return True

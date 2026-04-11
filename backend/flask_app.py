@@ -22,6 +22,7 @@ from telebot import types
 from dotenv import load_dotenv
 from ai_parser import parser_service
 from database_manager import setup_database
+from database_manager import add_pending_expense
 from telegram_bot import send_transaction_ui, register_handlers
 from api_routes import api
 from bff_routes import bff
@@ -60,14 +61,28 @@ def process_text_and_notify(raw_text: str, payer: str, chat_id: str = MY_CHAT_ID
     if not enriched.get('is_expense', False):
         return False
 
-    send_transaction_ui(
-        bot=bot,
-        chat_id=chat_id,
+    expense_id = add_pending_expense(
         merchant=enriched['merchant'],
         amount=enriched['amount'],
+        payer=payer,
         category=enriched['category'],
-        payer=payer
     )
+    if expense_id is None:
+        print("Failed to save pending expense to database.")
+        return False
+
+    try:
+        send_transaction_ui(
+            bot=bot,
+            chat_id=chat_id,
+            merchant=enriched['merchant'],
+            amount=enriched['amount'],
+            category=enriched['category'],
+            payer=payer,
+            expense_id=expense_id,
+        )
+    except Exception as e:
+        print(f"Telegram notification failed (expense #{expense_id} saved as pending): {e}")
     return True
 
 

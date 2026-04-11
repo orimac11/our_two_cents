@@ -13,18 +13,18 @@ import os
 import re
 from telebot import types
 from ai_parser import parser_service
-from database_manager import add_expense
+from database_manager import add_pending_expense, confirm_expense_split
 
 PAYER_1 = os.getenv('PAYER_1', 'Michael')
 PAYER_2 = os.getenv('PAYER_2', 'Ori')
 
 
 def send_transaction_ui(bot, chat_id: str | int, merchant: str, amount: float,
-                        category: str, payer: str) -> None:
+                        category: str, payer: str, expense_id: int | None = None) -> None:
     """Send an inline keyboard message asking the user to choose a split type.
 
-    Encodes transaction data into the callback payload using ``|`` as a delimiter.
-    Fields are sanitized and truncated to stay within Telegram's 64-byte callback limit.
+    Encodes the expense DB row ID into the callback payload so the button handler
+    can update the existing pending row rather than inserting a duplicate.
 
     :param bot: The ``telebot.TeleBot`` instance to send the message with.
     :param chat_id: Telegram chat ID to send the message to.
@@ -32,17 +32,13 @@ def send_transaction_ui(bot, chat_id: str | int, merchant: str, amount: float,
     :param amount: Transaction amount in ILS.
     :param category: Expense category assigned by the AI parser.
     :param payer: Name of the person who made the transaction.
+    :param expense_id: DB row ID of the pending expense to confirm.
     """
     markup = types.InlineKeyboardMarkup(row_width=2)
 
-    # Sanitize fields to prevent delimiter collisions and cap length for callback byte limit
-    m_safe = str(merchant).replace('|', '').strip()[:10]
-    p_safe = str(payer).replace('|', '').strip()[:10]
-    a_safe = str(amount)
-    c_safe = str(category).replace('|', '').strip()
-
-    cb_shared = f"shrd|{m_safe}|{a_safe}|{c_safe}|{p_safe}"
-    cb_priv = f"priv|{m_safe}|{a_safe}|{c_safe}|{p_safe}"
+    id_part = str(expense_id) if expense_id is not None else "0"
+    cb_shared = f"shrd|{id_part}"
+    cb_priv = f"priv|{id_part}"
 
     print(f"[DEBUG] Callback Length: {len(cb_shared.encode('utf-8'))} bytes")
 
@@ -101,55 +97,55 @@ def register_handlers(bot) -> None:
             )
             return
 
+        expense_id = add_pending_expense(
+            merchant=enriched['merchant'],
+            amount=enriched['amount'],
+            payer=message.from_user.first_name,
+            category=enriched['category'],
+        )
         send_transaction_ui(
             bot=bot,
             chat_id=message.chat.id,
             merchant=enriched['merchant'],
             amount=enriched['amount'],
             category=enriched['category'],
-            payer=message.from_user.first_name
+            payer=message.from_user.first_name,
+            expense_id=expense_id,
         )
 
     @bot.callback_query_handler(func=lambda call: True)
     def handle_ui_decision(call):
         """Handle the shared/personal button press from the transaction UI.
 
-        Parses the ``|``-delimited callback payload, saves the expense to the
-        database, and updates the original message to confirm the logged entry.
+        Parses the ``|``-delimited callback payload containing the expense row ID,
+        updates the pending expense's split type, and edits the original message.
         """
         try:
             print(f"[DEBUG] Button Pressed! Raw Data received: {call.data}")
 
             data_parts = call.data.split('|')
-            print(f"[DEBUG] Split parts: {data_parts} (Count: {len(data_parts)})")
-
-            if len(data_parts) < 5:
-                print(f"[ERROR] Callback data is incomplete or corrupted: {call.data}")
+            if len(data_parts) < 2:
+                print(f"[ERROR] Callback data is incomplete: {call.data}")
                 return
 
-            action, merchant, amount, category, original_payer = data_parts
+            action, expense_id_str = data_parts[0], data_parts[1]
             db_split = "shared" if action == "shrd" else "personal"
+            expense_id = int(expense_id_str)
 
-            print(f"[DEBUG] Attempting to save: {merchant}, {amount}, {original_payer}, {db_split}")
+            print(f"[DEBUG] Confirming expense #{expense_id} as {db_split}")
 
-            success = add_expense(
-                merchant=merchant,
-                amount=float(amount),
-                payer=original_payer,
-                split=db_split,
-                category=category
-            )
+            success = confirm_expense_split(expense_id, db_split)
 
             if success:
-                print(f"[SUCCESS] Transaction saved to database.")
+                print(f"[SUCCESS] Expense #{expense_id} confirmed as {db_split}.")
                 bot.edit_message_text(
                     chat_id=call.message.chat.id,
                     message_id=call.message.message_id,
-                    text=f"✅ *Logged for {original_payer}*\n🏪 {merchant}... | ₪{amount} | {db_split}",
+                    text=f"✅ *Logged* | {db_split.capitalize()}",
                     parse_mode="Markdown"
                 )
             else:
-                print(f"[ERROR] database_manager.add_expense returned False.")
+                print(f"[ERROR] confirm_expense_split returned False for id={expense_id}.")
 
             bot.answer_callback_query(call.id)
         except Exception as e:
