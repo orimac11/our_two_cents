@@ -74,7 +74,7 @@ def expenses_datatable(
             {"name": "Payer", "id": "payer", "editable": True},
         ],
         editable=True,
-        row_deletable=False,
+        row_deletable=True,
         sort_action="native",
         page_size=10,
         style_table={"overflowX": "auto", "borderRadius": "8px",

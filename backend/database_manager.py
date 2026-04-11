@@ -31,6 +31,7 @@ from db_expenses import (
     get_raw_monthly_expenses,
     update_expense_category,
     update_expense,
+    delete_expense,
     get_raw_yearly_expenses,
     get_yearly_summary,
 )

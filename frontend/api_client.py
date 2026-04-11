@@ -154,6 +154,18 @@ def save_category_budget(category: str, monthly_target: float) -> bool:
         return False
 
 
+def delete_expense(expense_id: int) -> bool:
+    """Deletes a specific expense record by ID."""
+    url = f"{BASE_URL}/expenses/{expense_id}"
+    try:
+        response = session.delete(url)
+        response.raise_for_status()
+        return response.json().get("success", False)
+    except Exception as e:
+        print(f"Error deleting expense {expense_id}: {e}")
+        return False
+
+
 def update_expense(expense_id: int, merchant: str, amount: float,
                    category: str, payer: str) -> bool:
     """

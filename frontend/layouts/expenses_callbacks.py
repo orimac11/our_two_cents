@@ -26,6 +26,7 @@ from components.charts import category_pie_chart, monthly_trends_bar_chart
 from api_client import (
     fetch_dashboard_data,
     update_expense,
+    delete_expense,
     export_to_sheets,
 )
 from layouts.expenses_layout import _Ids
@@ -291,22 +292,42 @@ def register_expenses_callbacks(app: Dash) -> None:
     @app.callback(
         Output(ids.edit_status, "children"),
         Output(ids.reference_store, "data", allow_duplicate=True),
+        Output(ids.ids_store, "data", allow_duplicate=True),
         Input(ids.table, "data"),
         State(ids.reference_store, "data"),
         State(ids.ids_store, "data"),
         prevent_initial_call=True,
     )
     def _save_inline_edit(current_data: list[dict], reference_data: list[dict], row_ids: list):
-        """Detect a single changed row and persist it to the API.
+        """Detect a single changed or deleted row and persist it to the API.
 
         Compares ``current_data`` against ``reference_data`` to find exactly
-        one changed row, then calls the update endpoint for that row only.
+        one changed or deleted row, then calls the appropriate endpoint.
         """
-        if not current_data or not reference_data or not row_ids:
-            return no_update, no_update
+        if reference_data is None or row_ids is None:
+            return no_update, no_update, no_update
+
+        # --- DELETION ---
+        if len(current_data) == len(reference_data) - 1:
+            current_ids = {r.get("id") for r in current_data}
+            deleted_id = next(
+                (row_ids[i] for i, r in enumerate(reference_data) if r.get("id") not in current_ids),
+                None,
+            )
+            if not deleted_id:
+                return "Could not delete: ID not found.", no_update, no_update
+            success = delete_expense(int(deleted_id))
+            if success:
+                updated_ids = [rid for rid in row_ids if rid != deleted_id]
+                return "✓ Expense deleted", current_data, updated_ids
+            return "Failed to delete — check the server logs.", no_update, no_update
+
+        # --- EDIT ---
+        if not current_data or not reference_data:
+            return no_update, no_update, no_update
 
         if len(current_data) != len(reference_data):
-            return no_update, current_data
+            return no_update, current_data, no_update
 
         changed_indices = [
             i for i, (curr, ref) in enumerate(zip(current_data, reference_data))
@@ -314,13 +335,13 @@ def register_expenses_callbacks(app: Dash) -> None:
         ]
 
         if len(changed_indices) != 1:
-            return no_update, current_data
+            return no_update, current_data, no_update
 
         row_index = changed_indices[0]
         expense_id = row_ids[row_index]
 
         if not expense_id:
-            return "Could not save: ID not found.", no_update
+            return "Could not save: ID not found.", no_update, no_update
 
         row = current_data[row_index]
         success = update_expense(
@@ -334,9 +355,9 @@ def register_expenses_callbacks(app: Dash) -> None:
         if success:
             updated_reference = list(reference_data)
             updated_reference[row_index] = row
-            return f"✓ {row.get('merchant', 'Row')} updated", updated_reference
+            return f"✓ {row.get('merchant', 'Row')} updated", updated_reference, no_update
 
-        return "Failed to save — check the server logs.", no_update
+        return "Failed to save — check the server logs.", no_update, no_update
 
     # =========================================================================
     # EXPORT — fires only on button click.

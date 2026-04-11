@@ -349,6 +349,23 @@ def update_expense_category(expense_id: int, new_category: str) -> bool:
         return False
 
 
+def delete_expense(expense_id: int) -> bool:
+    """Delete a specific expense record from the database.
+
+    :param expense_id: Primary key of the expense to delete.
+    :returns: ``True`` if a row was deleted, ``False`` otherwise.
+    """
+    try:
+        with sqlite3.connect('finance_bot.db') as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"❌ Database Error in delete_expense: {e}")
+        return False
+
+
 def update_expense(expense_id: int, merchant: str, amount: float, category: str, payer: str) -> bool:
     """Update all editable fields of a specific expense record.
 

@@ -21,7 +21,7 @@ from database_manager import (
     get_all_budgets,
     get_raw_monthly_expenses, get_raw_yearly_expenses, get_yearly_summary,
     get_spending_per_person_per_month, get_monthly_settlement, get_personal_monthly_totals,
-    update_expense_category, update_expense
+    update_expense_category, update_expense, delete_expense
 )
 import gspread
 import calendar
@@ -314,6 +314,16 @@ def api_update_expense(expense_id):
         return jsonify({"error": "merchant, amount, category and payer are all required"}), 400
 
     success = update_expense(expense_id, merchant, amount, category, payer)
+    if not success:
+        return jsonify({"error": "Expense not found"}), 404
+    invalidate_cache()
+    return jsonify({"success": True})
+
+
+@api.route('/expenses/<int:expense_id>', methods=['DELETE'])
+def api_delete_expense(expense_id):
+    """Deletes a specific expense record by ID."""
+    success = delete_expense(expense_id)
     if not success:
         return jsonify({"error": "Expense not found"}), 404
     invalidate_cache()
