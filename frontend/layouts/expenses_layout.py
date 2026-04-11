@@ -227,6 +227,7 @@ def get_expenses_layout() -> dbc.Container:
                                 expenses_datatable(
                                     data=[],
                                     categories=CATEGORIES,
+                                    payers=[PAYER_1, PAYER_2],
                                     table_id=ids.table,
                                     style_header={'backgroundColor': '#f8f9fa',
                                                   'fontWeight': 'bold'},

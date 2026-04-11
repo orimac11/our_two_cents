@@ -16,6 +16,7 @@ def expenses_datatable(
         data: list[dict],
         categories: list[str],
         table_id: str,
+        payers: list[str] | None = None,
         **kwargs
 ):
     """Build an editable DataTable for displaying and correcting monthly expenses.
@@ -71,7 +72,7 @@ def expenses_datatable(
                 "editable": True,
                 "presentation": "dropdown",
             },
-            {"name": "Payer", "id": "payer", "editable": True},
+            {"name": "Payer", "id": "payer", "editable": True, "presentation": "dropdown"},
         ],
         editable=True,
         row_deletable=True,
@@ -90,8 +91,10 @@ def expenses_datatable(
         },
         style_header=style_header,
         style_data_conditional=style_data_conditional,
-        dropdown={"category": {
-            "options": [{"label": c, "value": c} for c in categories]}},
+        dropdown={
+            "category": {"options": [{"label": c, "value": c} for c in categories]},
+            "payer": {"options": [{"label": p, "value": p} for p in (payers or [])]},
+        },
         **kwargs
     )
 
