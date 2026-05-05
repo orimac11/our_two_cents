@@ -6,7 +6,7 @@
 
 ## What It Does
 
-Michael and Ori share expenses. This system automatically captures transactions from Gmail receipts, card alerts, and manual Telegram input — parses them with GPT-4o — and displays everything on a live dashboard with charts, budget tracking, and settlement calculations.
+Our Two Cents is an automated, AI-powered financial operating system designed specifically for couples. It eliminates the friction of manual expense tracking by seamlessly aggregating transactions from multiple sources—including Gmail receipts, apple pay alerts, and Telegram. Powered by GPT-4o, the system intelligently extracts merchants, amounts, and categories, syncing everything to a live, interactive dashboard. From real-time budget tracking to calculating exact end-of-month settlements, it puts shared finances on autopilot.
 
 ## Features
 
