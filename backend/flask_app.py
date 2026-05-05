@@ -8,7 +8,7 @@ Sets up the Flask app, registers the ``api`` and ``bff`` Blueprints,
 initializes the Telegram bot, and defines three webhook endpoints:
 
 - ``/gmail-webhook`` — receives Gmail push notifications via Google Pub/Sub.
-- ``/webhook`` — receives card transaction alerts from external apps (e.g. MacroDroid).
+- ``/webhook`` — receives card transaction alerts from external apps
 - ``/telegram`` — receives Telegram bot updates.
 """
 
@@ -47,17 +47,19 @@ processed_emails = set()
 register_handlers(bot)
 
 
-def process_text_and_notify(raw_text: str, payer: str, chat_id: str = MY_CHAT_ID) -> bool:
+def process_text_and_notify(raw_text: str, payer: str, chat_id: str = MY_CHAT_ID, force_expense: bool = False) -> bool:
     """Parse raw text with the AI and send a Telegram confirmation UI if an expense is detected.
 
     :param raw_text: Raw text from an email, PDF, or card alert to classify.
     :param payer: Name of the person who made the transaction.
     :param chat_id: Telegram chat ID to send the UI to (defaults to ``MY_CHAT_ID``).
+    :param force_expense: Skip the ``is_expense`` check (use for card alerts where the
+                          source already guarantees a real transaction).
     :returns: ``True`` if an expense was detected and the UI was sent, ``False`` otherwise.
     """
     enriched = parser_service.parse(raw_text)
 
-    if not enriched.get('is_expense', False):
+    if not force_expense and not enriched.get('is_expense', False):
         return False
 
     try:
@@ -120,7 +122,7 @@ def handle_gmail_push():
 
 @app.route('/webhook', methods=['POST'])
 def handle_card_app_alert():
-    """Receive a transaction alert from an external card app (e.g. MacroDroid).
+    """Receive a transaction alert from an external card app
 
     Expects a JSON body with ``merchant``, ``amount``, and ``payer`` fields.
     Passes the data through the AI parser for consistent naming and categorization.
@@ -133,7 +135,7 @@ def handle_card_app_alert():
     amount = data.get('amount', '0.0')
     payer = data.get('payer', 'Card_User')
 
-    process_text_and_notify(f"{raw_merchant} {amount}", payer=payer)
+    process_text_and_notify(f"{raw_merchant} {amount}", payer=payer, force_expense=True)
 
     return jsonify({"status": "success"}), 200
 
