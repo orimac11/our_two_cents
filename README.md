@@ -51,7 +51,7 @@ Gmail / Card App / Telegram
 
 ## Screenshots
 
-> Add screenshots here
+<img width="1851" height="833" alt="image" src="https://github.com/user-attachments/assets/ed16afd8-93ec-43b6-97e5-ffaf4f008c38" />
 
 ## Setup
 
