@@ -107,12 +107,11 @@ def handle_gmail_push():
 
         for item in pdf_results:
             msg_id = item.get('msg_id')
-            if msg_id in processed_emails: continue
+            if msg_id in processed_emails:
+                continue
 
             if process_text_and_notify(item['text'], payer=user_name.capitalize()):
-                # Track processed message IDs to avoid duplicate notifications
                 processed_emails.add(msg_id)
-                break
 
         return "OK", 200
     except Exception as e:
@@ -135,8 +134,9 @@ def handle_card_app_alert():
     amount = data.get('amount', '0.0')
     payer = data.get('payer', 'Card_User')
 
-    process_text_and_notify(f"{raw_merchant} {amount}", payer=payer, force_expense=True)
-
+    success = process_text_and_notify(f"{raw_merchant} {amount}", payer=payer, force_expense=True)
+    if not success:
+        return jsonify({"status": "error", "message": "Notification failed"}), 500
     return jsonify({"status": "success"}), 200
 
 

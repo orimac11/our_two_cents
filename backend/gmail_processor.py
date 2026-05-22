@@ -55,15 +55,14 @@ class GmailProcessor:
         else:
             raise FileNotFoundError(f"{token_filename} missing.")
 
-    def _get_latest_message_meta(self) -> dict | None:
-        """Fetch the metadata of the most recent message in the inbox.
+    def _get_recent_message_metas(self, count: int = 5) -> list[dict]:
+        """Fetch metadata for the most recent messages in the inbox.
 
-        :returns: A message metadata dict with at least an ``id`` key,
-                  or ``None`` if the inbox is empty.
+        :param count: Number of recent messages to retrieve.
+        :returns: List of message metadata dicts, each with at least an ``id`` key.
         """
-        results = self.service.users().messages().list(userId='me', maxResults=1).execute()
-        messages = results.get('messages', [])
-        return messages[0] if messages else None
+        results = self.service.users().messages().list(userId='me', maxResults=count).execute()
+        return results.get('messages', [])
 
     def _extract_email_body(self, payload: dict) -> str:
         """Recursively extract the plain text body from an email payload.
@@ -149,49 +148,53 @@ class GmailProcessor:
         return {"filename": filename, "text": content}
 
     def get_latest_email_pdf_content(self) -> list[dict]:
-        """Fetch, filter, and extract content from the latest email.
+        """Fetch, filter, and extract content from the most recent emails.
 
-        1. Retrieves the most recent inbox message.
-        2. Skips it if the subject does not match financial keywords.
-        3. Extracts the plain text body and all PDF attachments.
-        4. Combines body and PDF text into a single delimited string per attachment.
+        1. Retrieves the 5 most recent inbox messages.
+        2. Skips any whose subject does not match financial keywords.
+        3. For financial emails: extracts PDF attachments if present, otherwise
+           falls back to the plain text body.
+        4. Returns one entry per PDF (or one body-only entry when no PDF exists).
 
-        :returns: A list of dicts, each with ``msg_id``, ``filename``, and ``text``
-                  (combined email body + PDF content). Returns ``[]`` if no
-                  financial content is found.
+        :returns: A list of dicts, each with ``msg_id``, ``filename``, and ``text``.
+                  Returns ``[]`` if no financial content is found.
         """
-        message_meta = self._get_latest_message_meta()
-        if not message_meta:
-            return []
-
-        msg_id = message_meta['id']
-        message = self.service.users().messages().get(userId='me', id=msg_id).execute()
-        payload = message.get('payload', {})
-
-        # Layer 1 Filter: skip non-financial emails before downloading attachments
-        if not self._is_financial_subject(payload):
-            return []
-
-        email_body = self._extract_email_body(payload)
-
-        parts = payload.get('parts', [])
+        message_metas = self._get_recent_message_metas(count=5)
         extracted_results = []
 
-        for part in parts:
-            if part.get('filename') and part.get('filename').lower().endswith('.pdf'):
-                result = self._download_and_parse_attachment(msg_id, part)
+        for message_meta in message_metas:
+            msg_id = message_meta['id']
+            message = self.service.users().messages().get(userId='me', id=msg_id).execute()
+            payload = message.get('payload', {})
 
-                if result["text"]:
-                    # Delimiters help the AI distinguish email context from invoice data
-                    combined_context = (
-                        f"--- EMAIL BODY START ---\n{email_body}\n--- EMAIL BODY END ---\n\n"
-                        f"--- PDF CONTENT START ---\n{result['text']}\n--- PDF CONTENT END ---"
-                    )
+            if not self._is_financial_subject(payload):
+                continue
 
-                    extracted_results.append({
-                        "msg_id": msg_id,
-                        "filename": result["filename"],
-                        "text": combined_context
-                    })
+            email_body = self._extract_email_body(payload)
+            parts = payload.get('parts', [])
+
+            pdf_found = False
+            for part in parts:
+                if part.get('filename') and part.get('filename').lower().endswith('.pdf'):
+                    result = self._download_and_parse_attachment(msg_id, part)
+                    if result["text"]:
+                        combined_context = (
+                            f"--- EMAIL BODY START ---\n{email_body}\n--- EMAIL BODY END ---\n\n"
+                            f"--- PDF CONTENT START ---\n{result['text']}\n--- PDF CONTENT END ---"
+                        )
+                        extracted_results.append({
+                            "msg_id": msg_id,
+                            "filename": result["filename"],
+                            "text": combined_context
+                        })
+                        pdf_found = True
+
+            # Fallback: no PDF attachment — use the email body on its own
+            if not pdf_found and email_body.strip():
+                extracted_results.append({
+                    "msg_id": msg_id,
+                    "filename": None,
+                    "text": f"--- EMAIL BODY START ---\n{email_body}\n--- EMAIL BODY END ---"
+                })
 
         return extracted_results
