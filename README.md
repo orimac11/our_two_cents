@@ -1,4 +1,4 @@
-# Finance Couple Bot
+# Our Two Cents
 
 > A full-stack personal finance tracker for two — powered by Telegram, GPT-4o, Gmail, and a live web dashboard.
 
