@@ -105,8 +105,3 @@ This project is fully configurable — anyone can run their own instance for the
 3. Set your `.env` variables with your own names, emails, and API keys
 4. Run `gmail_setup.py` to authorize Gmail access for both accounts
 5. Upload your `service_account.json` to PythonAnywhere
-
-## Live Demo
-
-- **Dashboard:** https://finance-couple-bot.onrender.com
-- **Backend API:** https://michaelketash.pythonanywhere.com/api
